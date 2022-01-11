@@ -23,7 +23,7 @@ original link 中提供了许多不相关任务的标注信息，因此不建议
 
 
 下载本云盘文件后，解压到当前README.md所在同级文件夹中，并运行ECB+_preprocess.py 提取事件因果数据集，
-不出意料的话，将提取出 共有 6721 条数据
+不出意料的话，将提取出 共有 6721 条数据 ，或运行ECB+_preprocess_plus.py 获取额外比例的负样本
 
 
 [1] Caselli T, Vossen P. The event storyline corpus: A new benchmark for causal and temporal relation extraction[C]//Proceedings of the Events and Stories in the News Workshop. 2017: 77-86.

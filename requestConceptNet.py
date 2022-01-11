@@ -31,5 +31,5 @@ def request_concept_net(query_word: str):
 
 
 if __name__ == '__main__':
-    query_word = 'Pigs'
+    query_word = 'CHeck_into'
     request_concept_net(query_word)

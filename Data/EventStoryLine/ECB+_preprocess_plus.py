@@ -1,9 +1,11 @@
 """
-    只能生成正样本
+    在ECB+_preprocess.py 添加了负采样逻辑，配合自动生成负样本，提供比例参数 可生成一定比例的正负样本
+    负样本生成策略：随机选择句中相距一定范围内的两个事件指代，如果该事件指代未标注为因果，我们将其标签设为NULL
 """
 
 import os
 from lxml import etree
+import random
 
 base_dir = os.path.abspath('.')
 annotations_path = os.path.join(base_dir, 'annotations')
@@ -100,20 +102,60 @@ if __name__ == '__main__':
     pass
 
 
-def extract_from_three_factors(causalities, events, tokens):
+def extract_from_three_factors(causalities, events, tokens, negative_ratio=3, non_cause_tag='NULL'):
     """
     利用三个参数抽取数据集
-    :param causalities:
-    :param events:
-    :param tokens:
-    :return:
+    :param causalities: [(s_event_id, e_event_id, rel_type),...]
+    :param events: {e_event_id: [e_event_index1,...e_event_index3],...}
+    :param tokens: {index: token,...}
+    :param negative_ratio: 正负样本比例,不足该比例就只用所有可用的负样本
+    :param non_cause_tag: 无因果类别标记
+    :return: 标注数据对象 [(sentence, tag)]  sentence 服从Rules规则
     """
     results = []
     STOP_TOKENS = ['.', '?', '!', '。']
     s_cause, e_cause, s_effect, e_effect = '<CAUSE>', '</CAUSE>', '<EFFECT>', '</EFFECT>'
     # 抽取
     wrong_num, ok_num = 0, 0
+
+    """扩充负样本"""
+    causalities_negative = []
+    negative_count = negative_ratio * len(causalities)
+    # 统计所有
+    all_events_id = []
     for causality in causalities:
+        s_event_id, e_event_id, rel_type = causality
+        if s_event_id not in all_events_id:
+            all_events_id.append(s_event_id)
+        if e_event_id not in all_events_id:
+            all_events_id.append(e_event_id)
+    for event_id1 in all_events_id:
+        for event_id2 in all_events_id:
+            if event_id2 == event_id1:  # 排除相同事件对
+                continue
+            ##########
+            should_skpt = False
+            for cau in causalities:
+                se, ee, rel = cau
+                if (se == event_id1 and ee == event_id2) or (ee == event_id1 and se == event_id2):  # 排除所有正样本
+                    should_skpt = True
+                    break
+            if should_skpt:
+                continue
+            ##########
+            try:
+                if abs(int(events[event_id1][0]) - int(events[event_id2][0])) <= 50:
+                    causalities_negative.append((event_id1, event_id2, non_cause_tag))
+            except:
+                pass
+    if not len(causalities_negative) <= negative_count:
+        causalities_negative = random.sample(causalities_negative, negative_count)  # 从all_events_id无重复随机采样negative_count个
+
+    # 正负样本的causalities 集合
+    causalities_all = causalities + causalities_negative
+    """扩充完毕"""
+
+    for causality in causalities_all:
         try:
             s_event_id, e_event_id, rel_type = causality
             s_event_indexs, e_event_indexs = events[s_event_id], events[e_event_id]
@@ -239,7 +281,6 @@ if __name__ == '__main__':
     test_evaluations = os.path.join(evaluations_path, '1', '1_1ecbplus.xml')
     results, ok_num, wrong_num = extract_from_two_files(test_ecb_plus, test_evaluations)
 
-
 # 数据集抽取并生成.txt 保存
 
 # 抽取annotations文件夹的标注数据
@@ -277,13 +318,13 @@ for dirname in os.listdir(evaluations_path):
 print(f'all_data 共有 {len(all_data)} 条, 示例:{all_data[0]}')
 
 relations = {}
-with open(os.path.join('.', 'eventStoryLine_dataset.txt'), mode='wt', encoding='utf-8') as writer:
+with open(os.path.join('.', 'eventStoryLine_dataset_plus.txt'), mode='wt', encoding='utf-8') as writer:
     for sentence, rel_type in all_data:
         rel_type = str(rel_type)
         if rel_type not in relations:
             relations[rel_type] = 0
         else:
             relations[rel_type] += 1
-        writer.write(sentence+'\n'+rel_type+'\n\n')
+        writer.write(sentence + '\n' + rel_type + '\n\n')
 
 print(f'数据关系类型分布的详情：{relations} ok_count: {ok_count}, wrong_count: {wrong_count}')
